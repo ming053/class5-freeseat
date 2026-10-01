@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>5반 자유석</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+<style>
+  body { font-family: 'Noto Sans KR', sans-serif; }
+  .seat { min-height: 64px; }
+  @media (min-width: 768px) { .seat { min-height: 84px; } }
+  .tv .seat { min-height: 96px; }
+  .view { display: none; }
+  .view.on { display: block; }
+</style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen">
+
+<!-- ===== 상단 바 ===== -->
+<header class="bg-white border-b border-slate-200 sticky top-0 z-30">
+  <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
+    <div class="flex items-center gap-2">
+      <span class="text-2xl">🪑</span>
+      <div>
+        <h1 class="font-black text-lg leading-tight">5반 자유석</h1>
+        <p class="text-[11px] text-slate-400 font-medium">선착순 자리 선택</p>
+      </div>
+    </div>
+    <div class="flex items-center gap-2">
+      <span id="conn" class="text-[11px] font-bold px-2.5 py-1 rounded-full bg-amber-50 text-amber-600 border border-amber-100">연결 중…</span>
+      <button id="btn-mode" class="text-xs font-bold px-3 py-1.5 rounded-lg bg-slate-800 text-white hover:bg-slate-700">선생님</button>
+    </div>
+  </div>
+</header>
+
+<main class="max-w-6xl mx-auto px-4 py-6">
+
+  <!-- 로딩 -->
+  <section id="v-loading" class="view on text-center py-24 text-slate-400 font-bold">불러오는 중…</section>
+
+  <!-- 학번 입력 -->
+  <section id="v-login" class="view">
+    <div class="max-w-sm mx-auto bg-white rounded-3xl shadow-lg border border-slate-100 p-8 text-center mt-8">
+      <div class="text-5xl">🙋</div>
+      <h2 class="text-2xl font-black mt-3">학번을 입력하세요</h2>
+      <p class="text-xs text-slate-400 mt-1 mb-6">본인 학번으로만 들어와 주세요.</p>
+      <input id="in-sid" inputmode="numeric" autocomplete="off" placeholder="예: 10501"
+        class="w-full text-center text-2xl font-black tracking-widest px-4 py-3 border-2 border-slate-200 focus:border-emerald-400 rounded-xl outline-none">
+      <button id="btn-enter" class="w-full mt-4 py-4 bg-emerald-500 hover:bg-emerald-600 text-white font-black rounded-2xl">입장하기</button>
+    </div>
+  </section>
+
+  <!-- 대기 -->
+  <section id="v-wait" class="view">
+    <div class="max-w-sm mx-auto bg-white rounded-3xl shadow-lg border border-slate-100 p-8 text-center mt-8">
+      <div class="text-5xl animate-bounce">⏳</div>
+      <h2 class="text-2xl font-black mt-3">잠시 기다려 주세요</h2>
+      <p class="text-sm text-slate-500 mt-2 leading-relaxed">선생님이 시작하면<br>자리 배치도가 바로 열려요.</p>
+      <div class="flex justify-center my-6"><span class="h-8 w-8 rounded-full border-4 border-emerald-500 border-t-transparent animate-spin"></span></div>
+      <p class="text-xs font-bold text-slate-400" data-me></p>
+      <button class="btn-logout mt-4 text-xs text-slate-400 underline">다른 학번으로 입장</button>
+    </div>
+  </section>
+
+  <!-- 자리 선택 -->
+  <section id="v-seats" class="view">
+    <div class="flex flex-wrap items-end justify-between gap-2 mb-4">
+      <div>
+        <h2 class="text-2xl font-black">앉고 싶은 빈자리를 누르세요</h2>
+        <p class="text-xs text-slate-500 mt-1"><span data-me></span> · 이미 찬 자리는 회색으로 바로 바뀌어요.</p>
+      </div>
+      <span id="remain" class="text-sm font-black text-emerald-600 bg-emerald-50 border border-emerald-100 px-3 py-1.5 rounded-full"></span>
+    </div>
+    <div class="bg-slate-800 text-white text-center py-3 rounded-xl font-bold tracking-widest mb-3">📺 칠판 (교실 앞)</div>
+    <div id="g-student" class="grid gap-2 md:gap-3 p-3 md:p-5 bg-slate-100 rounded-2xl"></div>
+    <div class="text-center mt-4"><button class="btn-logout text-xs text-slate-400 underline">다른 학번으로 입장</button></div>
+  </section>
+
+  <!-- 선택 완료 -->
+  <section id="v-done" class="view">
+    <div class="max-w-sm mx-auto bg-white rounded-3xl shadow-lg border border-slate-100 p-8 text-center mt-8">
+      <div class="text-6xl">🎉</div>
+      <h2 class="text-2xl font-black mt-3">자리 선택 완료!</h2>
+      <div class="bg-emerald-50 border border-emerald-100 rounded-2xl py-5 my-6">
+        <p class="text-xs font-bold text-emerald-600">내 자리</p>
+        <p id="done-seat" class="text-3xl font-black text-emerald-700 mt-1"></p>
+      </div>
+      <p class="text-xs font-bold text-slate-400" data-me></p>
+      <p class="text-xs text-slate-400 mt-3">자리를 바꾸고 싶으면 선생님께 말씀드리세요.</p>
+      <button class="btn-logout mt-4 text-xs text-slate-400 underline">다른 학번으로 입장</button>
+    </div>
+  </section>
+
+  <!-- ===== 선생님 모드 ===== -->
+  <section id="v-teacher" class="view">
+    <div class="flex gap-1 mb-5 bg-white p-1 rounded-xl border border-slate-200 w-fit">
+      <button data-tab="live" class="tab px-4 py-2 rounded-lg text-sm font-bold">실시간 현황</button>
+      <button data-tab="layout" class="tab px-4 py-2 rounded-lg text-sm font-bold">자리 배치</button>
+      <button data-tab="roster" class="tab px-4 py-2 rounded-lg text-sm font-bold">학생 명단</button>
+      <button data-tab="settings" class="tab px-4 py-2 rounded-lg text-sm font-bold">설정</button>
+    </div>
+
+    <!-- 실시간 현황 -->
+    <div id="t-live" class="tpane">
+      <div class="flex flex-wrap items-center justify-between gap-3 bg-white border border-slate-200 rounded-2xl p-4 mb-4">
+        <div>
+          <p class="text-xs font-bold text-slate-400">진행 상태</p>
+          <p id="stat" class="text-xl font-black"></p>
+        </div>
+        <div class="flex gap-2">
+          <button id="btn-tv" class="px-4 py-3 rounded-xl text-sm font-bold bg-slate-100 hover:bg-slate-200">TV 크게 보기</button>
+          <button id="btn-toggle" class="px-6 py-3 rounded-xl text-base font-black text-white"></button>
+        </div>
+      </div>
+      <div id="live-wrap" class="grid grid-cols-12 gap-4">
+        <div id="live-grid-box" class="col-span-12 lg:col-span-9">
+          <div class="bg-slate-800 text-white text-center py-3 rounded-xl font-bold tracking-widest mb-3">📺 칠판 (교실 앞)</div>
+          <div id="g-teacher" class="grid gap-2 md:gap-3 p-3 md:p-5 bg-white border border-slate-200 rounded-2xl"></div>
+          <p class="text-xs text-slate-400 mt-2">※ 학생이 앉은 자리를 누르면 그 자리를 비울 수 있어요.</p>
+        </div>
+        <div id="live-side" class="col-span-12 lg:col-span-3 space-y-4">
+          <div class="bg-white border border-slate-200 rounded-2xl p-4">
+            <h3 class="font-black text-sm mb-2">⏱️ 선택 순서</h3>
+            <ol id="order-list" class="space-y-1.5 text-sm max-h-72 overflow-y-auto"></ol>
+          </div>
+          <div class="bg-white border border-slate-200 rounded-2xl p-4">
+            <h3 class="font-black text-sm mb-2">🙈 아직 안 고른 학생 <span id="unchosen-count" class="text-rose-500"></span></h3>
+            <div id="unchosen" class="flex flex-wrap gap-1.5 max-h-60 overflow-y-auto"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 자리 배치 -->
+    <div id="t-layout" class="tpane">
+      <div class="bg-white border border-slate-200 rounded-2xl p-4 mb-4 flex flex-wrap items-end gap-3">
+        <label class="text-xs font-bold text-slate-500">분단(가로) 수
+          <input id="in-cols" type="number" min="1" max="10" class="block mt-1 w-24 px-3 py-2 border border-slate-200 rounded-lg font-bold">
+        </label>
+        <label class="text-xs font-bold text-slate-500">줄(세로) 수
+          <input id="in-rows" type="number" min="1" max="10" class="block mt-1 w-24 px-3 py-2 border border-slate-200 rounded-lg font-bold">
+        </label>
+        <button id="btn-resize" class="px-4 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-sm font-bold">크기 적용</button>
+        <p id="layout-count" class="text-sm font-bold text-emerald-600 ml-auto"></p>
+      </div>
+      <p class="text-xs text-slate-500 mb-2">칸을 누르면 <b>좌석 ↔ 빈칸(통로)</b>이 바뀝니다. 다 고친 뒤 저장하세요.</p>
+      <div class="bg-slate-800 text-white text-center py-3 rounded-xl font-bold tracking-widest mb-3">📺 칠판 (교실 앞)</div>
+      <div id="g-layout" class="grid gap-2 md:gap-3 p-3 md:p-5 bg-slate-100 rounded-2xl"></div>
+      <button id="btn-save-layout" class="mt-4 px-6 py-3 bg-slate-800 hover:bg-slate-700 text-white font-black rounded-xl">배치 저장하기</button>
+    </div>
+
+    <!-- 학생 명단 -->
+    <div id="t-roster" class="tpane">
+      <div class="bg-white border border-slate-200 rounded-2xl p-5">
+        <h3 class="font-black">학생 명단</h3>
+        <p class="text-xs text-slate-500 mt-1 mb-3">한 줄에 한 명씩 <b>학번 이름</b> 형식으로 적어 주세요. (예: <code>10501 김민준</code>)<br>
+          명단에 있는 학번만 입장할 수 있어요. 명단이 비어 있으면 아무 학번이나 들어올 수 있어요.</p>
+        <textarea id="in-roster" rows="14" class="w-full p-3 border-2 border-slate-200 focus:border-slate-400 rounded-xl font-mono text-sm outline-none"></textarea>
+        <button id="btn-save-roster" class="mt-3 px-6 py-3 bg-slate-800 hover:bg-slate-700 text-white font-black rounded-xl">명단 저장하기</button>
+      </div>
+    </div>
+
+    <!-- 설정 -->
+    <div id="t-settings" class="tpane space-y-4">
+      <div class="bg-white border border-slate-200 rounded-2xl p-5">
+        <h3 class="font-black">선생님 비밀번호</h3>
+        <div class="flex gap-2 mt-3">
+          <input id="in-pw" type="text" class="px-3 py-2 border border-slate-200 rounded-lg font-bold">
+          <button id="btn-save-pw" class="px-4 py-2 bg-slate-800 text-white rounded-lg text-sm font-bold">변경</button>
+        </div>
+      </div>
+      <div class="bg-rose-50 border border-rose-100 rounded-2xl p-5">
+        <h3 class="font-black text-rose-700">새로 자리 바꾸기</h3>
+        <p class="text-xs text-rose-600 mt-1 mb-3">학생들이 고른 자리를 모두 지우고 '멈춤' 상태로 돌립니다. 배치와 명단은 그대로 남아요.</p>
+        <button id="btn-reset" class="px-5 py-2.5 bg-rose-500 hover:bg-rose-600 text-white rounded-lg text-sm font-black">전체 자리 초기화</button>
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- ===== 공용 모달 ===== -->
+<div id="modal" class="fixed inset-0 bg-black/50 z-50 hidden items-center justify-center p-4">
+  <div class="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+    <h3 id="m-title" class="font-black text-lg"></h3>
+    <p id="m-msg" class="text-sm text-slate-600 mt-2 leading-relaxed whitespace-pre-line"></p>
+    <input id="m-input" type="password" class="hidden w-full mt-4 px-4 py-3 border-2 border-slate-200 rounded-xl text-center font-bold outline-none">
+    <div class="flex gap-2 mt-5">
+      <button id="m-cancel" class="flex-1 py-3 rounded-xl bg-slate-100 font-bold">취소</button>
+      <button id="m-ok" class="flex-1 py-3 rounded-xl bg-slate-800 text-white font-bold">확인</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ====== 설정 ======
+const FIREBASE_URL = "https://class5-4b7fc-default-rtdb.firebaseio.com/";
+const ROOT = "freeSeat5";   // 데이터 저장 위치 (이전 사이트와 겹치지 않음)
+
+// 기본 배치: 6분단 × 6줄, 1·3·4분단 맨 뒷줄은 빈칸 → 33석
+const DEFAULT_CONFIG = { rows: 6, cols: 6, disabled: { r5c0: true, r5c2: true, r5c3: true }, password: "1234" };
+
+firebase.initializeApp({ databaseURL: FIREBASE_URL });
+const db = firebase.database();
+const ref = db.ref(ROOT);
+
+let state = { config: DEFAULT_CONFIG, roster: {}, open: false, seats: {}, mine: {} };
+let loaded = false, teacher = sessionStorage.getItem("fs5_teacher") === "1";
+let me = null, tab = "live", draft = null, tv = false, offset = 0, busy = false;
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const keyOf = (r, c) => `r${r}c${c}`;
+const parseKey = k => { const m = /^r(\d+)c(\d+)$/.exec(k); return m ? { r: +m[1], c: +m[2] } : null; };
+const label = k => { const p = parseKey(k); return p ? `${p.c + 1}분단 ${p.r + 1}번째 줄` : k; };
+const shortLabel = k => { const p = parseKey(k); return p ? `${p.c + 1}-${p.r + 1}` : k; };
+const nameOf = sid => state.roster[sid] || "";
+const who = sid => nameOf(sid) ? `${nameOf(sid)} (${sid})` : sid;
+
+// ====== 모달 ======
+function modal({ title, msg = "", input = false, ok = "확인", cancel = null }) {
+  return new Promise(res => {
+    $("m-title").textContent = title; $("m-msg").textContent = msg;
+    const inp = $("m-input"); inp.value = ""; inp.classList.toggle("hidden", !input);
+    $("m-ok").textContent = ok;
+    $("m-cancel").classList.toggle("hidden", !cancel); if (cancel) $("m-cancel").textContent = cancel;
+    const m = $("modal"); m.classList.remove("hidden"); m.classList.add("flex");
+    if (input) setTimeout(() => inp.focus(), 50);
+    const done = v => { m.classList.add("hidden"); m.classList.remove("flex"); $("m-ok").onclick = $("m-cancel").onclick = inp.onkeydown = null; res(v); };
+    $("m-ok").onclick = () => done(input ? inp.value : true);
+    $("m-cancel").onclick = () => done(input ? null : false);
+    inp.onkeydown = e => { if (e.key === "Enter") done(inp.value); };
+  });
+}
+
+// ====== 실시간 연결 ======
+db.ref(".info/serverTimeOffset").on("value", s => offset = s.val() || 0);
+db.ref(".info/connected").on("value", s => {
+  const c = $("conn");
+  if (s.val()) { c.textContent = "● 실시간 연결됨"; c.className = "text-[11px] font-bold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-100"; }
+  else { c.textContent = "연결 끊김"; c.className = "text-[11px] font-bold px-2.5 py-1 rounded-full bg-rose-50 text-rose-600 border border-rose-100"; }
+});
+ref.on("value", snap => {
+  const v = snap.val();
+  if (!v || !v.config) { ref.update({ config: DEFAULT_CONFIG, open: false }); return; }
+  state = {
+    config: { ...DEFAULT_CONFIG, ...v.config, disabled: v.config.disabled || {} },
+    roster: v.roster || {}, open: !!v.open, seats: v.seats || {}, mine: v.mine || {}
+  };
+  loaded = true; render();
+}, err => modal({ title: "연결 오류", msg: "데이터베이스에 연결하지 못했어요.\n" + err.message }));
+
+// ====== 화면 전환 ======
+function show(id) { document.querySelectorAll(".view").forEach(v => v.classList.toggle("on", v.id === id)); }
+
+function render() {
+  if (!loaded) return;
+  $("btn-mode").textContent = teacher ? "학생 화면" : "선생님";
+  if (teacher) { show("v-teacher"); renderTeacher(); return; }
+
+  const saved = localStorage.getItem("fs5_sid");
+  if (!me && saved && (Object.keys(state.roster).length === 0 || state.roster[saved])) me = saved;
+  if (!me) { show("v-login"); return; }
+
+  document.querySelectorAll("[data-me]").forEach(e => e.textContent = `입장: ${who(me)}`);
+  const myKey = state.mine[me];
+  if (myKey && state.seats[myKey] && state.seats[myKey].sid === me) {
+    $("done-seat").textContent = label(myKey); show("v-done"); return;
+  }
+  if (!state.open) { show("v-wait"); return; }
+  show("v-seats");
+  const total = seatKeys().length, taken = Object.keys(state.seats).length;
+  $("remain").textContent = `남은 자리 ${total - taken} / ${total}`;
+  buildGrid($("g-student"), "student");
+}
+
+function seatKeys(cfg = state.config) {
+  const out = [];
+  for (let r = 0; r < cfg.rows; r++) for (let c = 0; c < cfg.cols; c++) { const k = keyOf(r, c); if (!cfg.disabled[k]) out.push(k); }
+  return out;
+}
+
+function orderMap() {
+  const list = Object.entries(state.seats).sort((a, b) => (a[1].t || 0) - (b[1].t || 0));
+  const map = {}; list.forEach(([k], i) => map[k] = i + 1);
+  return { list, map };
+}
+
+// ====== 좌석 그리드 ======
+function buildGrid(el, mode) {
+  const cfg = mode === "layout" ? draft : state.config;
+  const { map } = orderMap();
+  el.style.gridTemplateColumns = `repeat(${cfg.cols}, minmax(0, 1fr))`;
+  let h = "";
+  for (let r = 0; r < cfg.rows; r++) for (let c = 0; c < cfg.cols; c++) {
+    const k = keyOf(r, c), off = !!cfg.disabled[k];
+    if (mode === "layout") {
+      h += off
+        ? `<button data-k="${k}" class="seat rounded-xl border-2 border-dashed border-slate-300 text-slate-300 text-xs font-bold">빈칸</button>`
+        : `<button data-k="${k}" class="seat rounded-xl bg-white border-2 border-emerald-300 text-emerald-700 text-xs font-black">${shortLabel(k)}</button>`;
+      continue;
+    }
+    if (off) { h += `<div class="seat"></div>`; continue; }
+    const s = state.seats[k];
+    if (mode === "student") {
+      h += s
+        ? `<div class="seat rounded-xl bg-slate-300 text-white flex flex-col items-center justify-center p-1 cursor-not-allowed">
+             <span class="text-[10px] opacity-80">${shortLabel(k)}</span>
+             <span class="text-xs md:text-sm font-black truncate max-w-full">${esc(nameOf(s.sid) || "선택됨")}</span></div>`
+        : `<button data-k="${k}" class="seat rounded-xl bg-white border-2 border-slate-200 hover:border-emerald-500 hover:bg-emerald-50 active:scale-95 transition flex flex-col items-center justify-center p-1 shadow-sm">
+             <span class="text-[10px] text-slate-400 font-bold">${shortLabel(k)}</span>
+             <span class="text-xs font-black text-emerald-600">빈자리</span></button>`;
+    } else {
+      h += s
+        ? `<button data-k="${k}" class="seat relative rounded-xl bg-slate-800 text-white flex flex-col items-center justify-center p-1 shadow-md hover:bg-slate-700">
+             <span class="absolute top-1 left-1.5 text-[10px] font-black text-amber-300">${map[k]}</span>
+             <span class="text-[10px] text-slate-400">${shortLabel(k)}</span>
+             <span class="${tv ? "text-xl md:text-2xl" : "text-sm md:text-lg"} font-black text-yellow-300 truncate max-w-full">${esc(nameOf(s.sid) || s.sid)}</span>
+             ${nameOf(s.sid) ? `<span class="text-[10px] text-slate-400">${esc(s.sid)}</span>` : ""}</button>`
+        : `<div class="seat rounded-xl border-2 border-dashed border-slate-300 flex flex-col items-center justify-center text-slate-400">
+             <span class="text-[10px]">${shortLabel(k)}</span><span class="text-xs font-bold text-emerald-500">공석</span></div>`;
+    }
+  }
+  el.innerHTML = h;
+}
+
+// ====== 학생 동작 ======
+async function enter() {
+  const sid = $("in-sid").value.trim();
+  if (!sid) return modal({ title: "학번을 입력하세요" });
+  if (/[.#$\[\]\/\s]/.test(sid)) return modal({ title: "학번 형식 오류", msg: "숫자(또는 영문)만 입력해 주세요." });
+  if (Object.keys(state.roster).length && !state.roster[sid])
+    return modal({ title: "명단에 없는 학번", msg: `${sid}은(는) 5반 명단에 없어요.\n학번을 다시 확인해 주세요.` });
+  if (nameOf(sid)) {
+    const ok = await modal({ title: "본인이 맞나요?", msg: `${sid} ${nameOf(sid)}`, ok: "네, 맞아요", cancel: "아니요" });
+    if (!ok) return;
+  }
+  me = sid; localStorage.setItem("fs5_sid", sid); $("in-sid").value = ""; render();
+}
+
+function logout() { me = null; localStorage.removeItem("fs5_sid"); render(); }
+
+async function claim(k) {
+  if (busy || !me) return;
+  if (!state.open) return modal({ title: "지금은 멈춤 상태예요", msg: "선생님이 다시 시작할 때까지 기다려 주세요." });
+  const ok = await modal({ title: "이 자리로 할까요?", msg: `${label(k)}\n한 번 고르면 바꿀 수 없어요.`, ok: "이 자리로!", cancel: "다시 고를래요" });
+  if (!ok) return;
+  busy = true;
+  try {
+    // 1) 내가 아직 자리가 없을 때만 예약
+    const mineRef = db.ref(`${ROOT}/mine/${me}`);
+    const r1 = await mineRef.transaction(cur => cur ? undefined : k);
+    if (!r1.committed) { busy = false; return modal({ title: "이미 자리를 골랐어요" }); }
+    // 2) 좌석이 비어 있을 때만 차지 (동시에 눌러도 한 명만 성공)
+    const r2 = await db.ref(`${ROOT}/seats/${k}`).transaction(cur => cur ? undefined : { sid: me, t: Date.now() + offset });
+    if (!r2.committed) {
+      await mineRef.remove();
+      busy = false;
+      return modal({ title: "아쉬워요! 😢", msg: "방금 다른 친구가 먼저 그 자리를 골랐어요.\n다른 빈자리를 골라 주세요." });
+    }
+  } catch (e) {
+    modal({ title: "오류", msg: e.message });
+  }
+  busy = false;
+}
+
+// ====== 선생님 동작 ======
+function renderTeacher() {
+  document.querySelectorAll(".tab").forEach(b => b.className = "tab px-4 py-2 rounded-lg text-sm font-bold " + (b.dataset.tab === tab ? "bg-slate-800 text-white" : "text-slate-500 hover:bg-slate-100"));
+  document.querySelectorAll(".tpane").forEach(p => p.classList.toggle("hidden", p.id !== "t-" + tab));
+
+  const total = seatKeys().length, taken = Object.keys(state.seats).length;
+  $("stat").innerHTML = `${state.open ? '<span class="text-emerald-600">🟢 선택 진행 중</span>' : '<span class="text-rose-500">🔴 멈춤</span>'}
+    <span class="text-slate-400 text-base font-bold ml-2">${taken} / ${total}석 선택됨</span>`;
+  const t = $("btn-toggle");
+  t.textContent = state.open ? "⏸ 멈추기" : "▶ 시작하기";
+  t.className = "px-6 py-3 rounded-xl text-base font-black text-white " + (state.open ? "bg-rose-500 hover:bg-rose-600" : "bg-emerald-500 hover:bg-emerald-600");
+
+  $("live-grid-box").className = tv ? "col-span-12 tv" : "col-span-12 lg:col-span-9";
+  $("live-side").classList.toggle("hidden", tv);
+  $("btn-tv").textContent = tv ? "순위표 같이 보기" : "TV 크게 보기";
+  buildGrid($("g-teacher"), "teacher");
+
+  const { list } = orderMap();
+  $("order-list").innerHTML = list.length
+    ? list.map(([k, s], i) => `<li class="flex justify-between gap-2 bg-slate-50 rounded-lg px-2.5 py-1.5">
+        <span class="font-bold truncate"><span class="text-amber-600 mr-1">${i + 1}</span>${esc(nameOf(s.sid) || s.sid)}</span>
+        <span class="text-xs text-slate-400 shrink-0">${shortLabel(k)} · ${new Date(s.t).toLocaleTimeString("ko-KR", { hour12: false })}</span></li>`).join("")
+    : `<li class="text-slate-400 text-center py-4">아직 없어요</li>`;
+
+  const rosterIds = Object.keys(state.roster).sort();
+  if (!rosterIds.length) {
+    $("unchosen").innerHTML = `<p class="text-xs text-slate-400">명단을 등록하면 여기에 표시돼요.</p>`; $("unchosen-count").textContent = "";
+  } else {
+    const rest = rosterIds.filter(id => !state.mine[id]);
+    $("unchosen-count").textContent = `${rest.length}명`;
+    $("unchosen").innerHTML = rest.length
+      ? rest.map(id => `<span class="text-xs font-bold bg-rose-50 text-rose-600 border border-rose-100 px-2 py-1 rounded-lg">${esc(state.roster[id])}</span>`).join("")
+      : `<p class="text-sm font-black text-emerald-600">모두 골랐어요! 🎉</p>`;
+  }
+
+  if (tab === "layout") renderLayout();
+}
+
+function openTab(name) {
+  tab = name;
+  if (name === "layout") draft = JSON.parse(JSON.stringify({ rows: state.config.rows, cols: state.config.cols, disabled: state.config.disabled }));
+  if (name === "roster") $("in-roster").value = Object.keys(state.roster).sort().map(id => `${id} ${state.roster[id]}`.trim()).join("\n");
+  if (name === "settings") $("in-pw").value = state.config.password;
+  renderTeacher();
+}
+
+function renderLayout() {
+  $("in-cols").value = draft.cols; $("in-rows").value = draft.rows;
+  $("layout-count").textContent = `좌석 ${seatKeys(draft).length}개`;
+  buildGrid($("g-layout"), "layout");
+}
+
+async function teacherLogin() {
+  const pw = await modal({ title: "선생님 모드", msg: "비밀번호를 입력하세요. (처음: 1234)", input: true, cancel: "취소" });
+  if (pw === null) return;
+  if (pw.trim() !== String(state.config.password)) return modal({ title: "비밀번호가 틀렸어요" });
+  teacher = true; sessionStorage.setItem("fs5_teacher", "1"); openTab("live");
+  render();
+}
+
+async function clearSeat(k) {
+  const s = state.seats[k]; if (!s) return;
+  const ok = await modal({ title: "자리 비우기", msg: `${label(k)}\n${who(s.sid)} 학생을 이 자리에서 뺄까요?\n(학생은 다시 자리를 고를 수 있어요)`, ok: "비우기", cancel: "취소" });
+  if (ok) ref.update({ [`seats/${k}`]: null, [`mine/${s.sid}`]: null });
+}
+
+async function saveLayout() {
+  const keys = seatKeys(draft);
+  if (!keys.length) return modal({ title: "좌석이 하나도 없어요" });
+  const dis = {};
+  for (let r = 0; r < draft.rows; r++) for (let c = 0; c < draft.cols; c++) if (draft.disabled[keyOf(r, c)]) dis[keyOf(r, c)] = true;
+  const upd = { "config/rows": draft.rows, "config/cols": draft.cols, "config/disabled": Object.keys(dis).length ? dis : null };
+  if (Object.keys(state.seats).length) {
+    const ok = await modal({ title: "배치를 바꿀까요?", msg: "이미 학생들이 고른 자리가 있어요.\n저장하면 고른 자리가 모두 초기화됩니다.", ok: "저장", cancel: "취소" });
+    if (!ok) return;
+    upd.seats = null; upd.mine = null;
+  }
+  await ref.update(upd);
+  modal({ title: "저장했어요", msg: `좌석 ${keys.length}개로 배치가 바뀌었어요.` });
+}
+
+async function saveRoster() {
+  const obj = {}, bad = [];
+  $("in-roster").value.split("\n").map(l => l.trim()).filter(Boolean).forEach(line => {
+    const [sid, ...rest] = line.split(/[\s,\t]+/);
+    if (/[.#$\[\]\/]/.test(sid)) bad.push(sid); else obj[sid] = rest.join(" ");
+  });
+  if (bad.length) return modal({ title: "학번 형식 오류", msg: bad.join(", ") });
+  await ref.child("roster").set(Object.keys(obj).length ? obj : null);
+  modal({ title: "명단 저장 완료", msg: `${Object.keys(obj).length}명이 등록됐어요.` });
+}
+
+// ====== 이벤트 연결 ======
+$("btn-enter").onclick = enter;
+$("in-sid").onkeydown = e => { if (e.key === "Enter") enter(); };
+document.querySelectorAll(".btn-logout").forEach(b => b.onclick = logout);
+$("g-student").onclick = e => { const b = e.target.closest("[data-k]"); if (b) claim(b.dataset.k); };
+$("g-teacher").onclick = e => { const b = e.target.closest("[data-k]"); if (b) clearSeat(b.dataset.k); };
+$("g-layout").onclick = e => {
+  const b = e.target.closest("[data-k]"); if (!b) return;
+  const k = b.dataset.k; draft.disabled[k] ? delete draft.disabled[k] : draft.disabled[k] = true; renderLayout();
+};
+$("btn-mode").onclick = () => {
+  if (teacher) { teacher = false; sessionStorage.removeItem("fs5_teacher"); render(); }
+  else teacherLogin();
+};
+document.querySelectorAll(".tab").forEach(b => b.onclick = () => openTab(b.dataset.tab));
+$("btn-toggle").onclick = () => ref.child("open").set(!state.open);
+$("btn-tv").onclick = () => { tv = !tv; renderTeacher(); };
+$("btn-resize").onclick = () => {
+  draft.cols = Math.min(10, Math.max(1, parseInt($("in-cols").value) || 1));
+  draft.rows = Math.min(10, Math.max(1, parseInt($("in-rows").value) || 1));
+  renderLayout();
+};
+$("btn-save-layout").onclick = saveLayout;
+$("btn-save-roster").onclick = saveRoster;
+$("btn-save-pw").onclick = async () => {
+  const pw = $("in-pw").value.trim(); if (!pw) return modal({ title: "비밀번호를 입력하세요" });
+  await ref.child("config/password").set(pw); modal({ title: "비밀번호를 바꿨어요" });
+};
+$("btn-reset").onclick = async () => {
+  const ok = await modal({ title: "전체 자리 초기화", msg: "학생들이 고른 자리를 모두 지우고 멈춤 상태로 바꿀까요?", ok: "초기화", cancel: "취소" });
+  if (ok) { await ref.update({ seats: null, mine: null, open: false }); modal({ title: "초기화했어요" }); }
+};
+</script>
+</body>
+</html>
