@@ -196,7 +196,7 @@
 
 <script>
 // ====== 설정 ======
-const FIREBASE_URL = "https://class5-freeseat-default-rtdb.asia-southeast1.firebasedatabase.app/";";
+const FIREBASE_URL = "https://class5-freeseat-default-rtdb.asia-southeast1.firebasedatabase.app/";
 const ROOT = "freeSeat5";   // 데이터 저장 위치 (이전 사이트와 겹치지 않음)
 
 // 기본 배치: 6분단 × 6줄, 1·3·4분단 맨 뒷줄은 빈칸 → 33석
@@ -419,7 +419,7 @@ function renderLayout() {
 }
 
 async function teacherLogin() {
-  const pw = await modal({ title: "선생님 모드", msg: "비밀번호를 입력하세요. (처음: 1234)", input: true, cancel: "취소" });
+  const pw = await modal({ title: "선생님 모드", msg: "비밀번호를 입력하세요.", input: true, cancel: "취소" });
   if (pw === null) return;
   if (pw.trim() !== String(state.config.password)) return modal({ title: "비밀번호가 틀렸어요" });
   teacher = true; sessionStorage.setItem("fs5_teacher", "1"); openTab("live");
